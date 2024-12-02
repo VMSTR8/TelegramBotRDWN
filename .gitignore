@@ -1,0 +1,73 @@
+# Python
+*.pyc
+*.pyo
+*.pyd
+__pycache__/
+*.pdb
+*.egg
+*.egg-info/
+dist/
+build/
+pip-wheel-metadata/
+
+# Virtual environment
+venv/
+ENV/
+env/
+../.venv/
+.venv/*
+*.venv
+
+# Jupyter Notebook
+.ipynb_checkpoints
+
+# PyCharm
+.idea/
+
+# VS Code
+.vscode/
+
+# MacOS
+.DS_Store
+
+# Windows
+Thumbs.db
+ehthumbs.db
+
+# pytest
+.cache/
+
+# mypy
+.mypy_cache/
+
+# Coverage
+.coverage
+.coverage.*
+
+# Pylint
+pylint-reports/
+
+# pytype
+.pytype/
+
+# Local configuration
+*.local
+
+# Environment files
+.env
+.env.*
+*.env
+
+# dotenv
+.envrc
+
+# Docker
+docker-compose.override.yml
+docker-compose.yml
+
+# Secret keys
+*.key
+*.pem
+
+# nginx
+nginx
