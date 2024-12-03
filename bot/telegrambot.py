@@ -9,6 +9,8 @@ from handlers.start_handler import router as start_router
 from handlers.admin_handler import router as admin_router
 from handlers.join_handler import router as join_router
 
+from tortoise import Tortoise
+
 
 class AiogramBot:
     def __init__(
@@ -39,21 +41,27 @@ class AiogramBot:
             f'{self.webhook_url}{self.webhook_path}'
         )
 
+    async def on_shutdown(self) -> None:
+        await Tortoise.close_connections()
+        await self.bot.delete_webhook()
+
     def setup_routes(self) -> None:
         self.dispatcher.include_router(start_router)
         self.dispatcher.include_router(admin_router)
         self.dispatcher.include_router(join_router)
 
-    def setup_webhook(self) -> None:
+    def startup_register(self):
         self.dispatcher.startup.register(self.on_startup)
 
+    def shutdown_register(self):
+        self.dispatcher.shutdown.register(self.on_shutdown)
+
+    def setup_webhook(self) -> None:
         webhook_requests_handler = SimpleRequestHandler(
             dispatcher=self.dispatcher,
             bot=self.bot,
         )
-
         webhook_requests_handler.register(self.app, path=self.webhook_path)
-
         setup_application(self.app, self.dispatcher, bot=self.bot)
 
     def run_webhook(self) -> None:
@@ -63,6 +71,8 @@ class AiogramBot:
         :return: None
         """
         self.setup_routes()
+        self.startup_register()
+        self.shutdown_register()
         self.setup_webhook()
         web.run_app(self.app, host=self.host, port=self.port)
 
@@ -76,6 +86,6 @@ class AiogramBot:
             asyncio.run(AiogramBot().run_polling())
         :return: None
         """
-        await self.bot.delete_webhook()
         self.setup_routes()
+        self.shutdown_register()
         await self.dispatcher.start_polling(self.bot)
