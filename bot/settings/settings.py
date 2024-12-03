@@ -7,6 +7,8 @@ dotenv_path = os.path.join(os.path.dirname(__file__), '.env')
 if os.path.exists(dotenv_path):
     load_dotenv(dotenv_path)
 
+DATABASE_URL = os.environ.get('DATABASE_URL')
+
 BOT_TOKEN = os.environ.get('BOT_TOKEN')
 ADMINS = os.environ.get('ADMINS')
 
