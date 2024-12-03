@@ -10,7 +10,12 @@ from aiogram.enums import ParseMode
 from aiogram.types import ReplyKeyboardMarkup, KeyboardButton, ReplyKeyboardRemove
 
 from utils.text_answers import answers
-from utils.decorators import is_text
+from utils.decorators import (
+    is_text,
+    survey_completion_status
+)
+
+from database.db_manager import user_update, user_get_or_create
 
 router = Router()
 
@@ -63,9 +68,10 @@ async def cancel_handler(message: types.Message, state: FSMContext) -> None:
     )
 
 
-# TODO должна быть проверка, есть ли анкета пользователя в базе
 @router.message(Command(commands=['join']))
+@survey_completion_status
 async def join_handler(message: types.Message, state: FSMContext) -> None:
+    await user_get_or_create(telegram_id=message.from_user.id)
     await state.set_state(Form.name)
     await message.answer(
         text='Представься, пожалуйста. Желательно полное ФИО.\n\n'
@@ -93,7 +99,7 @@ async def validate_name(message: types.Message, state: FSMContext) -> None:
             parse_mode=ParseMode.HTML
         )
         return
-    await state.update_data(name=name)
+    await state.update_data(name=name.lower())
 
     await state.set_state(Form.callsign)
     await message.answer(
@@ -114,10 +120,10 @@ async def validate_callsign(message: types.Message, state: FSMContext) -> None:
     callsign = await merge_message_parts(message=message, state=state, key='callsign')
     if not callsign:
         return
-    if len(callsign) > 20:
+    if len(callsign) > 10:
         await state.update_data(callsign='')
         await message.answer(
-            text='Превышен лимит позывного в 20 символов. '
+            text='Превышен лимит позывного в 10 символов. '
                  'Введи корректный позывной.\n\n'
                  f'{CANCEL_REMINDER}',
             parse_mode=ParseMode.HTML
@@ -135,7 +141,7 @@ async def validate_callsign(message: types.Message, state: FSMContext) -> None:
 
         return
 
-    await state.update_data(callsign=sanitized_callsign)
+    await state.update_data(callsign=sanitized_callsign.lower())
     await state.set_state(Form.age)
     await message.answer(
         text='Напиши свою настоящую дату рождения в формате ДД.ММ.ГГГГ, например:\n\n'
@@ -179,11 +185,14 @@ async def validate_age(message: types.Message, state: FSMContext) -> None:
     age = today.year - birth_date.year - ((today.month, today.day) < (birth_date.month, birth_date.day))
 
     if age < 21:
+        await state.update_data(age=birth_date)
+        data = await state.get_data()
+        data['approved'] = False
+        await user_update(telegram_id=message.from_user.id, **data)
         await message.answer(
             text='К сожалению мы не можем принять тебя в команду, так как твой возраст меньше 21 года.\n\n'
                  'Попробуй обратиться к нам в будущем, когда тебе исполнится 21 год.'
         )
-        # TODO Добавить запись а базу данных с отметкой "отказано"
         await state.clear()
         return
 
@@ -407,7 +416,7 @@ async def validate_agreement(message: types.Message, state: FSMContext) -> None:
     if agreement_status:
         await state.update_data(agreement=agreement_status)
         data = await state.get_data()
-        # TODO делаем тут запись в базу данных
+        await user_update(telegram_id=message.from_user.id, **data)
         await message.answer(
             text='Опрос пройден! Спасибо!',
             reply_markup=ReplyKeyboardRemove()
