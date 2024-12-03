@@ -14,6 +14,8 @@ class User(Model):
     car = fields.BooleanField(null=True, default=None)
     frequency = fields.CharField(max_length=255, null=True, default=None)
     agreement = fields.BooleanField(null=True, default=None)
+    approved = fields.BooleanField(null=True, default=None)
+    reserved = fields.BooleanField(null=True, default=None)
 
     class Meta:
         table = "users"
