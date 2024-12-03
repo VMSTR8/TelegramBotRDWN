@@ -1,5 +1,6 @@
 from asyncio import run
 
+from database.init import init
 from telegrambot import AiogramBot
 from settings.settings import (
     BOT_TOKEN,
@@ -19,9 +20,10 @@ def main() -> None:
         port=int(WEB_SERVER_PORT),
     )
 
-    # ЗАПУСКАЕТСЯ ТОЛЬКО ДЛЯ ТЕСТИРОВАНИЯ
-    run(bot.run_polling())
+    run(init())
 
+    # POLLING ЗАПУСКАЕТСЯ ТОЛЬКО ДЛЯ ТЕСТИРОВАНИЯ
+    run(bot.run_polling())
     # bot.run_webhook()
 
 
