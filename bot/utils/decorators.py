@@ -6,6 +6,8 @@ from settings.settings import ADMINS
 
 from utils.text_answers import answers
 
+from database.db_manager import user_get_or_none
+
 CANCEL_REMINDER = answers.get('CANCEL_REMINDER')
 
 
@@ -43,4 +45,24 @@ def is_text(func):
             return
         return await func(message, *args, **kwargs)
 
+    return wrapper
+
+
+def survey_completion_status(func):
+    @wraps(func)
+    async def wrapper(message: types.Message, *args, **kwargs):
+        user = await user_get_or_none(telegram_id=message.from_user.id)
+        if user:
+            if user.approved is True:
+                await message.answer(
+                    text='Ты уже в команде, зачем еще раз проходить опрос?'
+                )
+                return
+            if user.approved is False:
+                await message.answer(
+                    text='Во вступлении в команду отказано. Больше опрос '
+                         'пройти нельзя.'
+                )
+                return
+        return await func(message, *args, **kwargs)
     return wrapper
