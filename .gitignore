@@ -71,3 +71,9 @@ docker-compose.yml
 
 # nginx
 nginx
+
+# db data
+*.toml
+*.sqlite3
+bot/migrations
+
