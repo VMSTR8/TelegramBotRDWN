@@ -4,16 +4,16 @@ from aiogram.enums import ParseMode
 from aiogram.types import ReplyKeyboardRemove
 from aiogram.fsm.context import FSMContext
 
+from database.db_manager import user_get_or_create
+
 
 router = Router()
 
 
-# TODO: При нажатии на старт id пользователя сразу попадает в базу
 @router.message(CommandStart())
 async def start_router(message: types.Message, state: FSMContext) -> None:
-
+    await user_get_or_create(telegram_id=message.from_user.id)
     await state.clear()
-
     user = message.from_user.first_name
     await message.answer(
         text=f'<b>{user}</b>, приветствую тебя в нашем командном чат-боте!\n\n'
