@@ -7,7 +7,7 @@ class User(Model):
     id = fields.IntField(pk=True)
     telegram_id = fields.IntField(unique=True)
     name = fields.CharField(max_length=100, null=True, default=None)
-    callsign = fields.CharField(max_length=10, unique=True, null=True, default=None)
+    callsign = fields.CharField(max_length=255, unique=True, null=True, default=None)
     age = fields.DateField(null=True, default=None)
     about = fields.TextField(max_length=1000, null=True, default=None)
     experience = fields.TextField(max_length=1000, null=True, default=None)
