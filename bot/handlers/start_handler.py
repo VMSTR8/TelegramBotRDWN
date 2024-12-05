@@ -4,7 +4,7 @@ from aiogram.enums import ParseMode
 from aiogram.types import ReplyKeyboardRemove
 from aiogram.fsm.context import FSMContext
 
-from database.db_manager import user_get_or_create
+from database.users_db_manager import user_get_or_create
 
 
 router = Router()
