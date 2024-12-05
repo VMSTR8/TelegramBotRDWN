@@ -6,7 +6,7 @@ from settings.settings import ADMINS
 
 from utils.text_answers import answers
 
-from database.db_manager import user_get_or_none
+from database.users_db_manager import user_get_or_none
 
 CANCEL_REMINDER = answers.get('CANCEL_REMINDER')
 
@@ -62,6 +62,16 @@ def survey_completion_status(func):
                 await message.answer(
                     text='Во вступлении в команду отказано. Больше опрос '
                          'пройти нельзя.'
+                )
+                return
+            if user.callsign:
+                await message.answer(
+                    text='Твоя анкета уже зарегистрирована. Как только '
+                         'командир команды с ней ознакомится, он свяжется с тобой '
+                         'через бота.\n\n'
+                         'Командир команды имеет право отказать во вступлении в команду '
+                         'без объяснения причин.\n\n'
+                         'В случае отказа уведомление так же придет в диалог с чат-ботом.'
                 )
                 return
         return await func(message, *args, **kwargs)
