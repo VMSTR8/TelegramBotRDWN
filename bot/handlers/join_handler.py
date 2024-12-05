@@ -12,10 +12,14 @@ from aiogram.types import ReplyKeyboardMarkup, KeyboardButton, ReplyKeyboardRemo
 from utils.text_answers import answers
 from utils.decorators import (
     is_text,
-    survey_completion_status
+    survey_completion_status,
 )
 
-from database.db_manager import user_update, user_get_or_create
+from database.users_db_manager import (
+    user_update,
+    user_get_or_create,
+    is_callsign_taken,
+)
 
 router = Router()
 
@@ -116,11 +120,14 @@ async def validate_name(message: types.Message, state: FSMContext) -> None:
 @router.message(Form.callsign)
 @is_text
 async def validate_callsign(message: types.Message, state: FSMContext) -> None:
-    sanitized_callsign = re.sub(LATIN_REGEX, '', message.text)
     callsign = await merge_message_parts(message=message, state=state, key='callsign')
     if not callsign:
         return
-    if len(callsign) > 10:
+
+    sanitized_callsign = re.sub(LATIN_REGEX, '', callsign)
+    not_unique_callsign = await is_callsign_taken(sanitized_callsign.lower())
+
+    if len(sanitized_callsign) > 10:
         await state.update_data(callsign='')
         await message.answer(
             text='Превышен лимит позывного в 10 символов. '
@@ -138,7 +145,19 @@ async def validate_callsign(message: types.Message, state: FSMContext) -> None:
                  f'{CANCEL_REMINDER}',
             parse_mode=ParseMode.HTML
         )
+        return
 
+    if callsign.lower() == '-':
+        user = await user_get_or_create(telegram_id=message.from_user.id)
+        sanitized_callsign = f'rdwn_{user.id}'
+
+    if not_unique_callsign:
+        await state.update_data(callsign='')
+        await message.answer(
+            text='К сожалению такой позывной уже занят. '
+                 'Придумай себе другой позывной.\n\n'
+                 f'{CANCEL_REMINDER}',
+        )
         return
 
     await state.update_data(callsign=sanitized_callsign.lower())
