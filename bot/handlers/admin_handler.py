@@ -10,11 +10,18 @@ from database.users_db_manager import get_all_users, user_get_or_none
 
 router = Router()
 
-admin_menu_buttons = [
+ADMIN_MENU_BUTTONS = [
     'Создать мероприятие',
     'Показать мероприятия',
     'Заявки на вступление',
     'Все пользователи'
+]
+EDIT_USER_MENU_BUTTONS = [
+    'Ред. имя',
+    'Ред. позывной',
+    'Ред. возраст',
+    'Ред. авто',
+    'Ред. бронь'
 ]
 
 
@@ -41,13 +48,16 @@ def all_users_keyboard_generate(users: list, page: int = 1) -> InlineKeyboardMar
     for user in user_buttons:
         callsign = user.get('callsign')
         telegram_id = user.get('telegram_id')
-        builder.button(text=callsign.capitalize(), callback_data=f'user:{telegram_id}:')
+        builder.button(
+            text=callsign.capitalize(),
+            callback_data=f'user:{telegram_id}-{page}'
+        )
 
     nav_buttons = []
     if page > 1:
-        nav_buttons.append(("<<", f'users_page:{page - 1}'))
+        nav_buttons.append(("<<", f'users_page-{page - 1}'))
     if end_index < len(users):
-        nav_buttons.append((">>", f'users_page:{page + 1}'))
+        nav_buttons.append((">>", f'users_page-{page + 1}'))
 
     for text, callback_data in nav_buttons:
         builder.button(text=text, callback_data=callback_data)
@@ -66,6 +76,23 @@ def all_users_keyboard_generate(users: list, page: int = 1) -> InlineKeyboardMar
     return builder.as_markup()
 
 
+def edit_users_keyboard_generate(telegram_id: int, page: int) -> InlineKeyboardMarkup:
+    builder = InlineKeyboardBuilder()
+    
+    for index in EDIT_USER_MENU_BUTTONS:
+        builder.button(
+            text=index,
+            callback_data=f'user_edit:{index.split()[1]}:{telegram_id}'
+        )
+
+    builder.button(text='Назад к пользователям', callback_data=f'back:users_page-{page}')
+    builder.button(text='В админ меню', callback_data='back:админ')
+
+    builder.adjust(3, 2, 1, 1)
+
+    return builder.as_markup()
+
+
 def back_to_admin_keyboard_generate() -> InlineKeyboardMarkup:
     builder = InlineKeyboardBuilder()
     builder.button(text='В админ меню', callback_data=f'back:админ')
@@ -75,17 +102,17 @@ def back_to_admin_keyboard_generate() -> InlineKeyboardMarkup:
 @router.message(Command(commands=['admin']))
 @router.callback_query(F.data == 'back:админ')
 @is_admin
-async def admin_router(interaction: types.Message | types.CallbackQuery) -> None:
+async def admin_command(interaction: types.Message | types.CallbackQuery) -> None:
     text = 'Админ меню'
     if isinstance(interaction, types.CallbackQuery):
         await interaction.message.edit_text(
             text=text,
-            reply_markup=admin_keyboard_generate(admin_menu_buttons)
+            reply_markup=admin_keyboard_generate(ADMIN_MENU_BUTTONS)
         )
     else:
         await interaction.answer(
             text=text,
-            reply_markup=admin_keyboard_generate(admin_menu_buttons)
+            reply_markup=admin_keyboard_generate(ADMIN_MENU_BUTTONS)
         )
 
 
@@ -120,9 +147,9 @@ async def show_all_users(callback: types.CallbackQuery) -> None:
     )
 
 
-@router.callback_query(F.data.startswith('users_page:'))
+@router.callback_query(F.data.startswith('users_page-'))
 async def change_users_page(callback: types.CallbackQuery) -> None:
-    page = int(callback.data.split(':')[1])
+    page = int(callback.data.split('-')[1])
     users = await get_all_users()
 
     await callback.message.edit_text(
@@ -133,8 +160,11 @@ async def change_users_page(callback: types.CallbackQuery) -> None:
 
 @router.callback_query(F.data.startswith('user:'))
 async def show_user_info(callback: types.CallbackQuery) -> None:
-    telegram_id = callback.data.split(':')[1]
-    user = await user_get_or_none(telegram_id=int(telegram_id))
+    parts = callback.data.split('-')
+    telegram_id = int(parts[0].split(':')[1])
+    page = int(parts[1]) if len(parts) > 1 else 1
+
+    user = await user_get_or_none(telegram_id=telegram_id)
     name = ' '.join(word.capitalize() for word in user.name.split())
     callsign = user.callsign.capitalize()
 
@@ -148,21 +178,65 @@ async def show_user_info(callback: types.CallbackQuery) -> None:
         )
     except AttributeError:
         age = 'Что-то пошло не так'
-
-    car = user.car
+    about = user.about
+    experience = user.experience
+    car = 'Есть' if user.car else 'Нет'
     approved = (
         'Принят в команду' if user.approved is True
         else 'Отказано' if user.approved is False
         else 'На рассмотрении'
     )
-    reserved = user.reserved
+    reserved = (
+        'Освобожден' if user.reserved is True
+        else 'Не освобожден' if user.reserved is False
+        else 'Еще не в команде'
+    )
     await callback.message.edit_text(
         text=f'<b>ФИО</b>: {name}\n'
              f'<b>Позывной</b>: {callsign}\n'
-             f'<b>Возраст</b>: {age}\n'
+             f'<b>Возраст</b>: {age}\n\n'
+             f'<b>О себе</b>: {about}\n\n'
+             f'<b>О своем опыте</b>: {experience}\n\n'
              f'<b>Наличие авто</b>: {car}\n'
              f'<b>Членство в команде</b>: {approved}\n'
              f'<b>Освобожден от опросов</b>: {reserved}',
-        reply_markup=back_to_admin_keyboard_generate(),
+        reply_markup=edit_users_keyboard_generate(telegram_id=telegram_id, page=page),
         parse_mode=ParseMode.HTML
+    )
+
+
+@router.callback_query(F.data.startswith('user_edit:имя'))
+async def edit_user_name(callback: types.CallbackQuery) -> None:
+    pass
+
+
+@router.callback_query(F.data.startswith('user_edit:позывной'))
+async def edit_user_callsign(callback: types.CallbackQuery) -> None:
+    pass
+
+
+@router.callback_query(F.data.startswith('user_edit:возраст'))
+async def edit_user_callsign(callback: types.CallbackQuery) -> None:
+    pass
+
+
+@router.callback_query(F.data.startswith('user_edit:авто'))
+async def edit_user_callsign(callback: types.CallbackQuery) -> None:
+    pass
+
+
+@router.callback_query(F.data.startswith('user_edit:бронь'))
+async def edit_user_callsign(callback: types.CallbackQuery) -> None:
+    pass
+
+
+@router.callback_query(F.data.startswith('back:users_page-'))
+async def back_to_users_page(callback: types.CallbackQuery) -> None:
+    page = int(callback.data.split('-')[1])
+
+    users = await get_all_users()
+
+    await callback.message.edit_text(
+        text='Все пользователи:',
+        reply_markup=all_users_keyboard_generate(users=users, page=page)
     )
