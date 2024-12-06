@@ -28,10 +28,6 @@ LATIN_REGEX = r'[^a-zA-Z]'
 CANCEL_REMINDER = answers.get('CANCEL_REMINDER')
 
 
-# TODO СДЕЛАТЬ ПРОВЕРКУ, ЧТО ПОЛЬЗОВАТЕЛЬ ОТПРАВЛЯЕТ ТЕКСТ, А НЕ ЧТО-ЛИБО ДРУГОЕ
-# Сейчас данный функционал обрабатывает декоратор @is_text
-
-
 class Form(StatesGroup):
     name = State()
     callsign = State()
@@ -67,14 +63,14 @@ async def cancel_handler(message: types.Message, state: FSMContext) -> None:
 
     await state.clear()
     await message.answer(
-        text='Прохождение опроса отменено.',
+        text='Выполнение команды прекращено.',
         reply_markup=ReplyKeyboardRemove()
     )
 
 
 @router.message(Command(commands=['join']))
 @survey_completion_status
-async def join_handler(message: types.Message, state: FSMContext) -> None:
+async def join_command(message: types.Message, state: FSMContext) -> None:
     await user_get_or_create(telegram_id=message.from_user.id)
     await state.set_state(Form.name)
     await message.answer(
@@ -87,7 +83,6 @@ async def join_handler(message: types.Message, state: FSMContext) -> None:
     )
 
 
-# TODO регулярное выражение, которое проверяет правильность написания позывного
 @router.message(Form.name)
 @is_text
 async def validate_name(message: types.Message, state: FSMContext) -> None:
