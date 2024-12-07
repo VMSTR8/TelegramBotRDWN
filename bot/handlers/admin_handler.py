@@ -234,9 +234,7 @@ async def show_user_info(callback: types.CallbackQuery) -> None:
 async def edit_user_name(callback: types.CallbackQuery, state: FSMContext) -> None:
 
     telegram_id = int(callback.data.split(':')[2])
-
     user = await user_get_or_none(telegram_id=telegram_id)
-    callsign = user.callsign.capitalize()
 
     if not user:
         await callback.answer(
@@ -244,6 +242,8 @@ async def edit_user_name(callback: types.CallbackQuery, state: FSMContext) -> No
             show_alert=True
         )
         return
+
+    callsign = user.callsign.capitalize()
 
     await state.clear()
     await state.set_state(Name.new_name)
