@@ -9,7 +9,10 @@ from aiogram.fsm.context import FSMContext
 from aiogram.enums import ParseMode
 from aiogram.types import ReplyKeyboardMarkup, KeyboardButton, ReplyKeyboardRemove
 
+from handlers.cancel_handler import cancel_handler
+
 from utils.text_answers import answers
+from utils.text_utils import merge_message_parts
 from utils.decorators import (
     is_text,
     survey_completion_status,
@@ -37,35 +40,6 @@ class Form(StatesGroup):
     car = State()
     frequency = State()
     agreement = State()
-
-
-async def merge_message_parts(
-        message: types.Message,
-        state: FSMContext,
-        key: str,
-) -> bool | str:
-    data = await state.get_data()
-    data_text = data.get(key, '')
-    text = message.text
-    if len(text) > 4000:
-        data_text += f' {text}'
-        await state.update_data(**{key: data_text})
-        return False
-
-    return f'{data_text} {text}'.strip()
-
-
-@router.message(Command(commands=['cancel']))
-async def cancel_handler(message: types.Message, state: FSMContext) -> None:
-    current_state = await state.get_state()
-    if current_state is None:
-        return
-
-    await state.clear()
-    await message.answer(
-        text='Выполнение команды прекращено.',
-        reply_markup=ReplyKeyboardRemove()
-    )
 
 
 @router.message(Command(commands=['join']))
