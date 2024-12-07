@@ -4,9 +4,15 @@ from aiogram import types, Router, F
 from aiogram.enums import ParseMode
 from aiogram.filters import Command
 from aiogram.utils.keyboard import InlineKeyboardBuilder, InlineKeyboardMarkup
+from aiogram.fsm.state import State, StatesGroup
+from aiogram.fsm.context import FSMContext
 
 from utils.decorators import is_admin
-from database.users_db_manager import get_all_users, user_get_or_none
+from utils.text_utils import merge_message_parts
+
+from database.users_db_manager import get_all_users, user_get_or_none, user_update
+
+from utils.text_answers import answers
 
 router = Router()
 
@@ -21,11 +27,18 @@ EDIT_USER_MENU_BUTTONS = [
     'Ред. позывной',
     'Ред. возраст',
     'Ред. авто',
-    'Ред. бронь'
+    'Ред. бронь',
+    'Удалить пользователя'
 ]
 
+CANCEL_REMINDER = answers.get('CANCEL_REMINDER')
 
-def admin_keyboard_generate(array: list) -> InlineKeyboardMarkup:
+
+class Name(StatesGroup):
+    new_name = State()
+
+
+def generate_admin_keyboard(array: list) -> InlineKeyboardMarkup:
     builder = InlineKeyboardBuilder()
     for index in array:
         builder.button(
@@ -38,7 +51,7 @@ def admin_keyboard_generate(array: list) -> InlineKeyboardMarkup:
     return builder.as_markup()
 
 
-def all_users_keyboard_generate(users: list, page: int = 1) -> InlineKeyboardMarkup:
+def generate_all_users_keyboard(users: list, page: int = 1) -> InlineKeyboardMarkup:
     builder = InlineKeyboardBuilder()
 
     start_index = (page - 1) * 9
@@ -76,7 +89,7 @@ def all_users_keyboard_generate(users: list, page: int = 1) -> InlineKeyboardMar
     return builder.as_markup()
 
 
-def edit_users_keyboard_generate(telegram_id: int, page: int) -> InlineKeyboardMarkup:
+def generate_edit_user_keyboard(telegram_id: int, page: int) -> InlineKeyboardMarkup:
     builder = InlineKeyboardBuilder()
     
     for index in EDIT_USER_MENU_BUTTONS:
@@ -88,15 +101,27 @@ def edit_users_keyboard_generate(telegram_id: int, page: int) -> InlineKeyboardM
     builder.button(text='Назад к пользователям', callback_data=f'back:users_page-{page}')
     builder.button(text='В админ меню', callback_data='back:админ')
 
-    builder.adjust(3, 2, 1, 1)
+    builder.adjust(3, 2, 1, 1, 1)
 
     return builder.as_markup()
 
 
-def back_to_admin_keyboard_generate() -> InlineKeyboardMarkup:
+def generate_back_to_admin_keyboard() -> InlineKeyboardMarkup:
     builder = InlineKeyboardBuilder()
     builder.button(text='В админ меню', callback_data=f'back:админ')
     return builder.as_markup()
+
+
+@router.message(Command(commands=['cancel']))
+async def cancel_handler(message: types.Message, state: FSMContext) -> None:
+    current_state = await state.get_state()
+    if current_state is None:
+        return
+
+    await state.clear()
+    await message.answer(
+        text='Выполнение команды прекращено.',
+    )
 
 
 @router.message(Command(commands=['admin']))
@@ -107,12 +132,12 @@ async def admin_command(interaction: types.Message | types.CallbackQuery) -> Non
     if isinstance(interaction, types.CallbackQuery):
         await interaction.message.edit_text(
             text=text,
-            reply_markup=admin_keyboard_generate(ADMIN_MENU_BUTTONS)
+            reply_markup=generate_admin_keyboard(ADMIN_MENU_BUTTONS)
         )
     else:
         await interaction.answer(
             text=text,
-            reply_markup=admin_keyboard_generate(ADMIN_MENU_BUTTONS)
+            reply_markup=generate_admin_keyboard(ADMIN_MENU_BUTTONS)
         )
 
 
@@ -120,7 +145,7 @@ async def admin_command(interaction: types.Message | types.CallbackQuery) -> Non
 async def show_events(callback: types.CallbackQuery) -> None:
     await callback.message.edit_text(
         text='Нет добавленных мероприятий',
-        reply_markup=back_to_admin_keyboard_generate()
+        reply_markup=generate_back_to_admin_keyboard()
     )
 
 
@@ -128,7 +153,7 @@ async def show_events(callback: types.CallbackQuery) -> None:
 async def show_surveys(callback: types.CallbackQuery) -> None:
     await callback.message.edit_text(
         text='Новых заявок нет',
-        reply_markup=back_to_admin_keyboard_generate()
+        reply_markup=generate_back_to_admin_keyboard()
     )
 
 
@@ -138,12 +163,12 @@ async def show_all_users(callback: types.CallbackQuery) -> None:
     if not users:
         await callback.message.edit_text(
             text='Нет сохраненных пользователей чат-бота',
-            reply_markup=back_to_admin_keyboard_generate()
+            reply_markup=generate_back_to_admin_keyboard()
         )
         return
     await callback.message.edit_text(
         text='Все пользователи:',
-        reply_markup=all_users_keyboard_generate(users=users)
+        reply_markup=generate_all_users_keyboard(users=users)
     )
 
 
@@ -154,7 +179,7 @@ async def change_users_page(callback: types.CallbackQuery) -> None:
 
     await callback.message.edit_text(
         text='Все пользователи:',
-        reply_markup=all_users_keyboard_generate(users=users, page=page)
+        reply_markup=generate_all_users_keyboard(users=users, page=page)
     )
 
 
@@ -200,14 +225,62 @@ async def show_user_info(callback: types.CallbackQuery) -> None:
              f'<b>Наличие авто</b>: {car}\n'
              f'<b>Членство в команде</b>: {approved}\n'
              f'<b>Освобожден от опросов</b>: {reserved}',
-        reply_markup=edit_users_keyboard_generate(telegram_id=telegram_id, page=page),
+        reply_markup=generate_edit_user_keyboard(telegram_id=telegram_id, page=page),
         parse_mode=ParseMode.HTML
     )
 
 
 @router.callback_query(F.data.startswith('user_edit:имя'))
-async def edit_user_name(callback: types.CallbackQuery) -> None:
-    pass
+async def edit_user_name(callback: types.CallbackQuery, state: FSMContext) -> None:
+
+    telegram_id = int(callback.data.split(':')[2])
+
+    user = await user_get_or_none(telegram_id=telegram_id)
+    callsign = user.callsign.capitalize()
+
+    if not user:
+        await callback.answer(
+            text='Пользователь не найден',
+            show_alert=True
+        )
+        return
+
+    await state.clear()
+    await state.set_state(Name.new_name)
+    await state.update_data(telegram_id=telegram_id, callsign=callsign)
+    await callback.message.answer(
+        text=f'Введи новое имя для <b>{callsign}</b>\n\n'
+             f'{CANCEL_REMINDER}',
+        parse_mode=ParseMode.HTML
+    )
+
+
+@router.message(Name.new_name)
+async def validate_new_name(message: types.Message, state: FSMContext) -> None:
+    new_name = await merge_message_parts(message=message, state=state, key='new_name')
+
+    if not new_name:
+        return
+
+    if len(new_name) > 100:
+        await message.answer(
+            text='Превышена длинна в 100 символов, '
+                 'введи имя заново не превышая лимит.\n\n'
+                 f'{CANCEL_REMINDER}',
+            parse_mode=ParseMode.HTML
+        )
+        return
+
+    data = await state.get_data()
+    telegram_id = data.get('telegram_id')
+
+    await user_update(telegram_id=telegram_id, name=new_name)
+    await message.answer(
+        text=f'Для <b>{data.get("callsign").capitalize()}</b> '
+             f'установлено новое имя - <b>{new_name.capitalize()}</b>',
+        parse_mode=ParseMode.HTML
+    )
+    await state.clear()
 
 
 @router.callback_query(F.data.startswith('user_edit:позывной'))
@@ -230,6 +303,11 @@ async def edit_user_callsign(callback: types.CallbackQuery) -> None:
     pass
 
 
+@router.callback_query(F.data.startswith('user_edit:пользователя'))
+async def delete_user(callback: types.CallbackQuery) -> None:
+    pass
+
+
 @router.callback_query(F.data.startswith('back:users_page-'))
 async def back_to_users_page(callback: types.CallbackQuery) -> None:
     page = int(callback.data.split('-')[1])
@@ -238,5 +316,5 @@ async def back_to_users_page(callback: types.CallbackQuery) -> None:
 
     await callback.message.edit_text(
         text='Все пользователи:',
-        reply_markup=all_users_keyboard_generate(users=users, page=page)
+        reply_markup=generate_all_users_keyboard(users=users, page=page)
     )
