@@ -8,6 +8,7 @@ from aiogram.webhook.aiohttp_server import SimpleRequestHandler, setup_applicati
 from handlers.start_handler import router as start_router
 from handlers.admin_handler import router as admin_router
 from handlers.join_handler import router as join_router
+from handlers.cancel_handler import router as cancel_router
 
 from tortoise import Tortoise
 
@@ -46,6 +47,7 @@ class AiogramBot:
         await self.bot.delete_webhook()
 
     def setup_routes(self) -> None:
+        self.dispatcher.include_router(cancel_router)
         self.dispatcher.include_router(start_router)
         self.dispatcher.include_router(admin_router)
         self.dispatcher.include_router(join_router)
