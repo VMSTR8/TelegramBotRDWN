@@ -1,3 +1,3 @@
 answers = {
-    'CANCEL_REMINDER': '<blockquote>Используй /cancel для отмены заполнения анкеты.</blockquote>'
+    'CANCEL_REMINDER': '<blockquote>Используй /cancel для выхода из диалога с ботом</blockquote>'
 }
