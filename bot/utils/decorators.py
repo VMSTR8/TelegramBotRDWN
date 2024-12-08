@@ -1,6 +1,7 @@
 from functools import wraps
 
 from aiogram import types
+from aiogram.fsm.context import FSMContext
 
 from settings.settings import ADMINS
 
@@ -75,4 +76,20 @@ def survey_completion_status(func):
                 )
                 return
         return await func(message, *args, **kwargs)
+    return wrapper
+
+
+def check_user_existence(func):
+    @wraps(func)
+    async def wrapper(callback: types.CallbackQuery, state: FSMContext, *args, **kwargs):
+        telegram_id = int(callback.data.split(':')[2])
+        user = await user_get_or_none(telegram_id=telegram_id)
+
+        if not user:
+            await callback.answer(
+                text='Пользователь не найден',
+                show_alert=True
+            )
+            return
+        return await func(callback, state, user, *args, **kwargs)
     return wrapper
