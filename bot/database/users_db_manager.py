@@ -29,6 +29,15 @@ async def user_update(telegram_id: int, **kwargs) -> User:
     return user
 
 
+async def user_delete(telegram_id: int) -> None:
+    user = await User.filter(telegram_id=telegram_id).first()
+    if not user:
+        raise ValueError(
+            f'User with {telegram_id} does not exist.'
+        )
+    await user.delete()
+
+
 async def is_callsign_taken(callsign: str) -> bool:
     return await User.filter(callsign=callsign).exists()
 
