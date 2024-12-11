@@ -62,10 +62,22 @@ def generate_edit_user_keyboard(telegram_id: int, page: int, array: list) -> Inl
             callback_data=f'user_edit:{index.split()[1]}:{telegram_id}'
         )
 
+    builder.button(text='Удалить пользователя', callback_data=f'delete_user:{telegram_id}-{page}')
     builder.button(text='Назад к пользователям', callback_data=f'back:users_page-{page}')
     builder.button(text='В админ меню', callback_data='back:админ')
 
     builder.adjust(3, 2, 1, 1, 1)
+
+    return builder.as_markup()
+
+
+def generate_delete_user_keyboard(telegram_id: int, page: int) -> InlineKeyboardMarkup:
+    builder = InlineKeyboardBuilder()
+
+    builder.button(text='Да', callback_data=f'confirm_user_deletion:{telegram_id}-{page}')
+    builder.button(text='Нет', callback_data=f'user:{telegram_id}-{page}')
+
+    builder.adjust(2)
 
     return builder.as_markup()
 
