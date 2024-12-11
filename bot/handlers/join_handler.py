@@ -143,10 +143,10 @@ async def validate_callsign(message: types.Message, state: FSMContext) -> None:
 @router.message(Form.age)
 @is_text
 async def validate_age(message: types.Message, state: FSMContext) -> None:
-    age = await merge_message_parts(message=message, state=state, key='age')
-    if not age:
+    date = await merge_message_parts(message=message, state=state, key='age')
+    if not date:
         return
-    if len(age) > 10:
+    if len(date) > 10:
         await state.update_data(age='')
         await message.answer(
             text='Превышена максимальная длина сообщения в 10 '
@@ -157,7 +157,7 @@ async def validate_age(message: types.Message, state: FSMContext) -> None:
         )
         return
     try:
-        birth_date = datetime.strptime(message.text, '%d.%m.%Y')
+        birth_date = datetime.strptime(date, '%d.%m.%Y')
     except ValueError:
         await message.answer(
             text='Неверный формат даты! Пожалуйста, укажи свою дату '
