@@ -1,8 +1,6 @@
 import re
 from datetime import datetime
 
-from typing import Tuple
-
 from aiogram import types, Router, F
 from aiogram.enums import ParseMode
 from aiogram.fsm.state import State, StatesGroup
@@ -14,9 +12,16 @@ from utils.text_utils import merge_message_parts
 from database.users_db_manager import (
     user_update,
     is_callsign_taken,
+    user_get_or_none,
+    user_delete,
+    get_all_users,
 )
 
 from utils.text_answers import answers
+from utils.keyboards import (
+    generate_delete_user_keyboard,
+    generate_all_users_keyboard
+)
 
 router = Router()
 
@@ -28,6 +33,7 @@ LATIN_REGEX = r'[^a-zA-Z]'
 class User(StatesGroup):
     new_name = State()
     new_callsign = State()
+    new_age = State()
 
 
 async def prepare_for_editing(
@@ -52,14 +58,6 @@ async def prepare_for_editing(
     )
 
 
-def parse_callback_data(callback_data: str, user: dict) -> Tuple[int, int]:
-    parts = callback_data.split('-')
-    print(parts)
-    page = parts[1]
-    telegram_id = user.telegram_id
-    return telegram_id, page
-
-
 @router.callback_query(F.data.startswith('user_edit:имя'))
 @check_user_existence
 async def edit_user_name(callback: types.CallbackQuery, state: FSMContext, user: dict) -> None:
@@ -82,6 +80,7 @@ async def validate_new_name(message: types.Message, state: FSMContext) -> None:
         return
 
     if len(new_name) > 100:
+        await state.update_data(new_name='')
         await message.answer(
             text='Превышена длинна в 100 символов, '
                  'введи имя заново не превышая лимит.\n\n'
@@ -127,6 +126,7 @@ async def validate_new_callsign(message: types.Message, state: FSMContext) -> No
     new_callsign = new_callsign.lower()
 
     if len(new_callsign) > 10:
+        await state.update_data(new_callsign='')
         await message.answer(
             text='Превышена длина позывного в 10 символов, '
                  'введи позывной заново не превышая лимит.\n\n'
@@ -168,8 +168,65 @@ async def validate_new_callsign(message: types.Message, state: FSMContext) -> No
 
 
 @router.callback_query(F.data.startswith('user_edit:возраст'))
-async def edit_user_age(callback: types.CallbackQuery) -> None:
-    pass
+@check_user_existence
+async def edit_user_age(callback: types.CallbackQuery, state: FSMContext, user: dict) -> None:
+    await prepare_for_editing(
+        callback=callback,
+        state=state,
+        user=user,
+        new_state=User.new_age,
+        editing_field='ВОЗРАСТ',
+        field_name='callsign',
+        field_value=user.callsign.capitalize()
+    )
+
+
+@router.message(User.new_age)
+async def validate_new_age(message: types.Message, state: FSMContext) -> None:
+    new_date = await merge_message_parts(message=message, state=state, key='new_age')
+
+    if not new_date:
+        return
+
+    if len(new_date) > 10:
+        await state.update_data(new_age='')
+        await message.answer(
+            text='Превышена максимальная длина сообщения в 10 '
+                 'символов. Надо ввести корректную дату.\n'
+                 'Формат: ДД.ММ.ГГГГ (10 символов ровно)\n\n'
+                 f'{CANCEL_REMINDER}',
+        )
+        return
+    try:
+        birth_date = datetime.strptime(new_date, '%d.%m.%Y')
+    except ValueError:
+        await message.answer(
+            text='Неверный формат даты! Нужно указать дату рождения '
+                 'в формате ДД.ММ.ГГГГ, например:\n\n'
+                 '<b>01.01.1990</b>\n\n'
+                 f'{CANCEL_REMINDER}',
+        )
+        return
+
+    today = datetime.today()
+    age = today.year - birth_date.year - ((today.month, today.day) < (birth_date.month, birth_date.day))
+
+    if age < 18:
+        await message.answer(
+            text='Возраст меньше 18 лет установить нельзя.\n\n'
+                 f'{CANCEL_REMINDER}',
+        )
+        return
+
+    data = await state.get_data()
+    telegram_id = data.get('telegram_id')
+    await user_update(telegram_id=telegram_id, age=birth_date)
+    await message.answer(
+        text=f'Для пользователя {data.get("callsign").capitalize()} '
+             f'установлена новая дата рождения: '
+             f'<b>{birth_date.strftime("%d.%m.%Y")}</b> [Возраст:<b>{age}</b>]'
+    )
+    await state.clear()
 
 
 @router.callback_query(F.data.startswith('user_edit:авто'))
@@ -220,6 +277,34 @@ async def edit_user_reserved(callback: types.CallbackQuery, state: FSMContext, u
     )
 
 
-@router.callback_query(F.data.startswith('user_edit:пользователя'))
+@router.callback_query(F.data.startswith('delete_user'))
 async def delete_user(callback: types.CallbackQuery) -> None:
-    pass
+    telegram_id = int(callback.data.split(':')[1].split('-')[0])
+    page = int(callback.data.split('-')[1])
+
+    user = await user_get_or_none(telegram_id=telegram_id)
+    await callback.message.edit_text(
+        text=f'Уверены, что хотите удалить пользователя '
+             f'{user.callsign.capitalize()}?',
+        reply_markup=generate_delete_user_keyboard(telegram_id=telegram_id, page=page)
+    )
+
+
+@router.callback_query(F.data.startswith('confirm_user_deletion'))
+async def confirm_user_deletion(callback: types.CallbackQuery) -> None:
+    telegram_id = int(callback.data.split(':')[1].split('-')[0])
+    page = int(callback.data.split('-')[1])
+
+    await user_delete(telegram_id=telegram_id)
+
+    await callback.answer(
+        text='Пользователь удален',
+        show_alert=True
+    )
+
+    users = await get_all_users()
+
+    await callback.message.edit_text(
+        text='Все пользователи',
+        reply_markup=generate_all_users_keyboard(users=users, page=page)
+    )
