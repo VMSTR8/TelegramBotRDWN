@@ -1,15 +1,6 @@
 from aiogram.types import InlineKeyboardMarkup
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 
-EDIT_USER_MENU_BUTTONS = [
-    'Ред. имя',
-    'Ред. позывной',
-    'Ред. возраст',
-    'Ред. авто',
-    'Ред. бронь',
-    'Удалить пользователя'
-]
-
 
 def generate_admin_keyboard(array: list) -> InlineKeyboardMarkup:
     builder = InlineKeyboardBuilder()
@@ -62,10 +53,10 @@ def generate_all_users_keyboard(users: list, page: int = 1) -> InlineKeyboardMar
     return builder.as_markup()
 
 
-def generate_edit_user_keyboard(telegram_id: int, page: int) -> InlineKeyboardMarkup:
+def generate_edit_user_keyboard(telegram_id: int, page: int, array: list) -> InlineKeyboardMarkup:
     builder = InlineKeyboardBuilder()
 
-    for index in EDIT_USER_MENU_BUTTONS:
+    for index in array:
         builder.button(
             text=index,
             callback_data=f'user_edit:{index.split()[1]}:{telegram_id}'

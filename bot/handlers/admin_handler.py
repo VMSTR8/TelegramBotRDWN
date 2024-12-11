@@ -29,6 +29,15 @@ ADMIN_MENU_BUTTONS = [
     'Все пользователи'
 ]
 
+EDIT_USER_MENU_BUTTONS = [
+    'Ред. имя',
+    'Ред. позывной',
+    'Ред. возраст',
+    'Ред. авто',
+    'Ред. бронь',
+    'Удалить пользователя'
+]
+
 
 @router.message(Command(commands=['admin']))
 @router.callback_query(F.data == 'back:админ')
@@ -131,7 +140,11 @@ async def show_user_info(callback: types.CallbackQuery) -> None:
              f'<b>6. НАЛИЧИЕ АВТО:</b> {car}\n'
              f'<b>7. ЧЛЕНСТВО В КОМАНДЕ:</b> {approved}\n'
              f'<b>8. ОСОБОЖДЕНИЕ ОТ ОПРОСОВ:</b> {reserved}',
-        reply_markup=generate_edit_user_keyboard(telegram_id=telegram_id, page=page),
+        reply_markup=generate_edit_user_keyboard(
+            telegram_id=telegram_id,
+            page=page,
+            array=EDIT_USER_MENU_BUTTONS
+        ),
         parse_mode=ParseMode.HTML
     )
 
