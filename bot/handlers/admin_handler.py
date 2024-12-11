@@ -34,8 +34,7 @@ EDIT_USER_MENU_BUTTONS = [
     'Ред. позывной',
     'Ред. возраст',
     'Ред. авто',
-    'Ред. бронь',
-    'Удалить пользователя'
+    'Ред. бронь'
 ]
 
 
@@ -82,7 +81,7 @@ async def show_all_users(callback: types.CallbackQuery) -> None:
         )
         return
     await callback.message.edit_text(
-        text='Все пользователи:',
+        text='Все пользователи',
         reply_markup=generate_all_users_keyboard(users=users)
     )
 
@@ -93,7 +92,7 @@ async def change_users_page(callback: types.CallbackQuery) -> None:
     users = await get_all_users()
 
     await callback.message.edit_text(
-        text='Все пользователи:',
+        text='Все пользователи',
         reply_markup=generate_all_users_keyboard(users=users, page=page)
     )
 
