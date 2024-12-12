@@ -6,7 +6,10 @@ from aiogram.enums import ParseMode
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.fsm.context import FSMContext
 
-from utils.decorators import check_user_existence
+from utils.decorators import (
+    check_user_existence,
+    is_text,
+)
 from utils.text_utils import merge_message_parts
 
 from database.users_db_manager import (
@@ -31,6 +34,14 @@ LATIN_REGEX = r'[^a-zA-Z]'
 
 
 class User(StatesGroup):
+    """
+    State group for managing user data updates in the FSM.
+
+    Attributes:
+        new_name (State): State for editing the user's name.
+        new_callsign (State): State for editing the user's callsign.
+        new_age (State): State for editing the user's age.
+    """
     new_name = State()
     new_callsign = State()
     new_age = State()
@@ -45,6 +56,21 @@ async def prepare_for_editing(
         field_name: str,
         field_value: str
 ) -> None:
+    """
+    Prepares the FSM state and context for editing a specific user field.
+
+    Args:
+        callback (types.CallbackQuery): Callback query instance triggering the edit.
+        state (FSMContext): Finite state machine context.
+        user (dict): User data dictionary.
+        new_state: FSM state to transition to.
+        editing_field (str): Display name of the field being edited.
+        field_name (str): Key of the field in the user data.
+        field_value (str): Current value of the field.
+
+    Returns:
+        None
+    """
     telegram_id = user.telegram_id
     await state.clear()
     await state.set_state(new_state)
@@ -61,6 +87,17 @@ async def prepare_for_editing(
 @router.callback_query(F.data.startswith('user_edit:имя'))
 @check_user_existence
 async def edit_user_name(callback: types.CallbackQuery, state: FSMContext, user: dict) -> None:
+    """
+    Handles the callback for editing a user's name.
+
+    Args:
+        callback (types.CallbackQuery): Callback query instance triggering the edit.
+        state (FSMContext): Finite state machine context.
+        user (dict): User data dictionary.
+
+    Returns:
+        None
+    """
     await prepare_for_editing(
         callback=callback,
         state=state,
@@ -73,7 +110,18 @@ async def edit_user_name(callback: types.CallbackQuery, state: FSMContext, user:
 
 
 @router.message(User.new_name)
+@is_text
 async def validate_new_name(message: types.Message, state: FSMContext) -> None:
+    """
+    Validates and updates the user's name.
+
+    Args:
+        message (types.Message): Incoming message with the new name.
+        state (FSMContext): Finite state machine context.
+
+    Returns:
+        None
+    """
     new_name = await merge_message_parts(message=message, state=state, key='new_name')
 
     if not new_name:
@@ -92,7 +140,15 @@ async def validate_new_name(message: types.Message, state: FSMContext) -> None:
     data = await state.get_data()
     telegram_id = data.get('telegram_id')
 
-    await user_update(telegram_id=telegram_id, name=new_name.lower())
+    try:
+        await user_update(telegram_id=telegram_id, name=new_name.lower())
+    except ValueError:
+        await state.clear()
+        await message.answer(
+            text='Пользователь не был найден. Изменение ФИО '
+                 'было отменено.'
+        )
+        return
     await message.answer(
         text=f'Для <b>{data.get("callsign").capitalize()}</b> '
              f'установлено новые ФИО: '
@@ -105,6 +161,17 @@ async def validate_new_name(message: types.Message, state: FSMContext) -> None:
 @router.callback_query(F.data.startswith('user_edit:позывной'))
 @check_user_existence
 async def edit_user_callsign(callback: types.CallbackQuery, state: FSMContext, user: dict) -> None:
+    """
+    Handles the callback for editing a user's callsign.
+
+    Args:
+        callback (types.CallbackQuery): Callback query instance triggering the edit.
+        state (FSMContext): Finite state machine context.
+        user (dict): User data dictionary.
+
+    Returns:
+        None
+    """
     await prepare_for_editing(
         callback=callback,
         state=state,
@@ -117,7 +184,18 @@ async def edit_user_callsign(callback: types.CallbackQuery, state: FSMContext, u
 
 
 @router.message(User.new_callsign)
+@is_text
 async def validate_new_callsign(message: types.Message, state: FSMContext) -> None:
+    """
+    Validates and updates the user's callsign.
+
+    Args:
+        message (types.Message): Incoming message with the new callsign.
+        state (FSMContext): Finite state machine context.
+
+    Returns:
+        None
+    """
     new_callsign = await merge_message_parts(message=message, state=state, key='new_callsign')
 
     if not new_callsign:
@@ -157,7 +235,15 @@ async def validate_new_callsign(message: types.Message, state: FSMContext) -> No
 
     data = await state.get_data()
     telegram_id = data.get('telegram_id')
-    await user_update(telegram_id=telegram_id, callsign=sanitized_callsign)
+    try:
+        await user_update(telegram_id=telegram_id, callsign=sanitized_callsign)
+    except ValueError:
+        await state.clear()
+        await message.answer(
+            text='Пользователь не найден. Изменение позывного '
+                 'было отменено.'
+        )
+        return
     await message.answer(
         text=f'Для <b>{data.get("callsign").capitalize()}</b> '
              f'установлен новый позывной: '
@@ -170,6 +256,17 @@ async def validate_new_callsign(message: types.Message, state: FSMContext) -> No
 @router.callback_query(F.data.startswith('user_edit:возраст'))
 @check_user_existence
 async def edit_user_age(callback: types.CallbackQuery, state: FSMContext, user: dict) -> None:
+    """
+    Handles the callback for editing a user's age.
+
+    Args:
+        callback (types.CallbackQuery): Callback query instance triggering the edit.
+        state (FSMContext): Finite state machine context.
+        user (dict): User data dictionary.
+
+    Returns:
+        None
+    """
     await prepare_for_editing(
         callback=callback,
         state=state,
@@ -182,7 +279,18 @@ async def edit_user_age(callback: types.CallbackQuery, state: FSMContext, user: 
 
 
 @router.message(User.new_age)
+@is_text
 async def validate_new_age(message: types.Message, state: FSMContext) -> None:
+    """
+    Validates and updates the user's age.
+
+    Args:
+        message (types.Message): Incoming message with the new age.
+        state (FSMContext): Finite state machine context.
+
+    Returns:
+        None
+    """
     new_date = await merge_message_parts(message=message, state=state, key='new_age')
 
     if not new_date:
@@ -220,7 +328,15 @@ async def validate_new_age(message: types.Message, state: FSMContext) -> None:
 
     data = await state.get_data()
     telegram_id = data.get('telegram_id')
-    await user_update(telegram_id=telegram_id, age=birth_date)
+    try:
+        await user_update(telegram_id=telegram_id, age=birth_date)
+    except ValueError:
+        await state.clear()
+        await message.answer(
+            text='Пользователь не был найден. Изменение даты рождения '
+                 'было отменено.'
+        )
+        return
     await message.answer(
         text=f'Для пользователя {data.get("callsign").capitalize()} '
              f'установлена новая дата рождения: '
@@ -232,6 +348,17 @@ async def validate_new_age(message: types.Message, state: FSMContext) -> None:
 @router.callback_query(F.data.startswith('user_edit:авто'))
 @check_user_existence
 async def edit_user_car(callback: types.CallbackQuery, state: FSMContext, user: dict) -> None:
+    """
+    Toggles the "car" attribute of a user.
+
+    Args:
+        callback (types.CallbackQuery): Callback query instance triggering the update.
+        state (FSMContext): Finite state machine context.
+        user (dict): User data dictionary.
+
+    Returns:
+        None
+    """
     if await state.get_state() is not None:
         await callback.message.answer(
             text='Выполнение команды прекращено.'
@@ -253,6 +380,17 @@ async def edit_user_car(callback: types.CallbackQuery, state: FSMContext, user: 
 @router.callback_query(F.data.startswith('user_edit:бронь'))
 @check_user_existence
 async def edit_user_reserved(callback: types.CallbackQuery, state: FSMContext, user: dict) -> None:
+    """
+    Toggles the "reserved" attribute of a user.
+
+    Args:
+        callback (types.CallbackQuery): Callback query instance triggering the update.
+        state (FSMContext): Finite state machine context.
+        user (dict): User data dictionary.
+
+    Returns:
+        None
+    """
     if await state.get_state() is not None:
         await callback.message.answer(
             text='Выполнение команды прекращено.'
@@ -278,11 +416,27 @@ async def edit_user_reserved(callback: types.CallbackQuery, state: FSMContext, u
 
 
 @router.callback_query(F.data.startswith('delete_user'))
-async def delete_user(callback: types.CallbackQuery) -> None:
+@check_user_existence
+async def delete_user(callback: types.CallbackQuery, state: FSMContext, user: dict) -> None:
+    """
+    Initiates the process of deleting a user by prompting for confirmation.
+
+    Args:
+        callback (types.CallbackQuery): Callback query instance containing the user's Telegram ID
+            and the current page in the callback data.
+        state (FSMContext): Finite state machine context to manage ongoing commands.
+        user (dict): Dictionary containing user data, such as the callsign.
+
+    Returns:
+        None
+    """
     telegram_id = int(callback.data.split(':')[1].split('-')[0])
     page = int(callback.data.split('-')[1])
-
-    user = await user_get_or_none(telegram_id=telegram_id)
+    if await state.get_state() is not None:
+        await callback.message.answer(
+            text='Выполнение команды прекращено.'
+        )
+    await state.clear()
     await callback.message.edit_text(
         text=f'Уверены, что хотите удалить пользователя '
              f'{user.callsign.capitalize()}?',
@@ -292,19 +446,39 @@ async def delete_user(callback: types.CallbackQuery) -> None:
 
 @router.callback_query(F.data.startswith('confirm_user_deletion'))
 async def confirm_user_deletion(callback: types.CallbackQuery) -> None:
+    """
+    Confirms and performs the deletion of a user.
+
+    Args:
+        callback (types.CallbackQuery): Callback query instance containing the user's Telegram ID
+            and the current page in the callback data.
+
+    Returns:
+        None
+    """
     telegram_id = int(callback.data.split(':')[1].split('-')[0])
     page = int(callback.data.split('-')[1])
 
-    await user_delete(telegram_id=telegram_id)
+    try:
+        await user_delete(telegram_id=telegram_id)
+    except ValueError:
+        await callback.answer(
+            text='Пользователь не найден, удаление отменено.',
+            show_alert=True
+        )
+
+        await callback.message.edit_text(
+            text='Все пользователи',
+            reply_markup=generate_all_users_keyboard(users=await get_all_users(), page=page),
+        )
+        return
 
     await callback.answer(
         text='Пользователь удален',
         show_alert=True
     )
 
-    users = await get_all_users()
-
     await callback.message.edit_text(
         text='Все пользователи',
-        reply_markup=generate_all_users_keyboard(users=users, page=page)
+        reply_markup=generate_all_users_keyboard(users=await get_all_users(), page=page)
     )
