@@ -43,10 +43,10 @@ def main() -> None:
 
     # POLLING MODE IS ONLY FOR TESTING
     # Uncomment the line below to run the bot in polling mode for local testing
-    run(bot.run_polling())
+    # run(bot.run_polling())
 
     # Start the bot in webhook mode
-    # bot.run_webhook()
+    bot.run_webhook()
 
 
 if __name__ == '__main__':
