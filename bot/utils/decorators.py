@@ -82,7 +82,10 @@ def survey_completion_status(func):
 def check_user_existence(func):
     @wraps(func)
     async def wrapper(callback: types.CallbackQuery, state: FSMContext, *args, **kwargs):
-        telegram_id = int(callback.data.split(':')[2])
+        try:
+            telegram_id = int(callback.data.split(':')[2])
+        except IndexError:
+            telegram_id = int(callback.data.split(':')[1].split('-')[0])
         user = await user_get_or_none(telegram_id=telegram_id)
 
         if not user:
