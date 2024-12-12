@@ -90,6 +90,11 @@ async def show_all_users(callback: types.CallbackQuery) -> None:
 async def change_users_page(callback: types.CallbackQuery) -> None:
     page = int(callback.data.split('-')[1])
     users = await get_all_users()
+    if not users:
+        await callback.message.edit_text(
+            text='Нет сохраненных пользователей чат-бота',
+            reply_markup=generate_back_to_admin_keyboard()
+        )
 
     await callback.message.edit_text(
         text='Все пользователи',
@@ -104,6 +109,17 @@ async def show_user_info(callback: types.CallbackQuery) -> None:
     page = int(parts[1]) if len(parts) > 1 else 1
 
     user = await user_get_or_none(telegram_id=telegram_id)
+    if not user:
+        await callback.answer(
+            text='Пользователь не был найден. Сейчас откроется '
+                 'меню со всеми пользователями.',
+            show_alert=True
+        )
+        await callback.message.edit_text(
+            text='Все пользователи',
+            reply_markup=generate_all_users_keyboard(users=await get_all_users(), page=page)
+        )
+        return
     name = ' '.join(word.capitalize() for word in user.name.split())
     callsign = user.callsign.capitalize()
 
