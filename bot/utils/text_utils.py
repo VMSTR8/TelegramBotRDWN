@@ -1,3 +1,5 @@
+from datetime import datetime
+
 from aiogram import types
 from aiogram.fsm.context import FSMContext
 
@@ -16,3 +18,9 @@ async def merge_message_parts(
         return False
 
     return f'{data_text} {text}'.strip()
+
+
+def calculate_age(birth_date: datetime) -> int:
+    today = datetime.today()
+    age = today.year - birth_date.year - ((today.month, today.day) < (birth_date.month, birth_date.day))
+    return age
