@@ -10,12 +10,11 @@ from utils.decorators import (
     check_user_existence,
     is_text,
 )
-from utils.text_utils import merge_message_parts
+from utils.text_utils import merge_message_parts, calculate_age
 
 from database.users_db_manager import (
     user_update,
     is_callsign_taken,
-    user_get_or_none,
     user_delete,
     get_all_users,
 )
@@ -26,11 +25,11 @@ from utils.keyboards import (
     generate_all_users_keyboard
 )
 
+from validators.user_validators import general_user_validation
+
 router = Router()
 
 CANCEL_REMINDER = answers.get('CANCEL_REMINDER')
-
-LATIN_REGEX = r'[^a-zA-Z]'
 
 
 class User(StatesGroup):
@@ -127,21 +126,16 @@ async def validate_new_name(message: types.Message, state: FSMContext) -> None:
     if not new_name:
         return
 
-    if len(new_name) > 100:
-        await state.update_data(new_name='')
-        await message.answer(
-            text='Превышена длинна в 100 символов, '
-                 'введи имя заново не превышая лимит.\n\n'
-                 f'{CANCEL_REMINDER}',
-            parse_mode=ParseMode.HTML
-        )
+    validated_input = await general_user_validation(message=message, state=state, name=new_name)
+
+    if not validated_input:
         return
 
     data = await state.get_data()
     telegram_id = data.get('telegram_id')
 
     try:
-        await user_update(telegram_id=telegram_id, name=new_name.lower())
+        await user_update(telegram_id=telegram_id, name=validated_input.name.lower())
     except ValueError:
         await state.clear()
         await message.answer(
@@ -201,32 +195,18 @@ async def validate_new_callsign(message: types.Message, state: FSMContext) -> No
     if not new_callsign:
         return
 
-    new_callsign = new_callsign.lower()
+    validated_input = await general_user_validation(message=message, state=state, callsign=new_callsign)
 
-    if len(new_callsign) > 10:
-        await state.update_data(new_callsign='')
-        await message.answer(
-            text='Превышена длина позывного в 10 символов, '
-                 'введи позывной заново не превышая лимит.\n\n'
-                 f'{CANCEL_REMINDER}',
-        )
+    if not validated_input:
         return
 
-    sanitized_callsign = re.sub(LATIN_REGEX, '', new_callsign)
+    validated_input = validated_input.callsign.lower()
 
-    if not sanitized_callsign:
-        await message.answer(
-            text='Неверный формат позывного. Текст должен содержать '
-                 'только латинские символы.\n\n'
-                 f'{CANCEL_REMINDER}',
-        )
-        return
-
-    callsign_taken = await is_callsign_taken(callsign=sanitized_callsign)
+    callsign_taken = await is_callsign_taken(callsign=validated_input)
 
     if callsign_taken:
         await message.answer(
-            text=f'Позывной <b>{sanitized_callsign.capitalize()}</b> '
+            text=f'Ошибка: Позывной <b>{validated_input.capitalize()}</b> '
                  'уже занят, придется выбрать другой позывной.\n\n'
                  f'{CANCEL_REMINDER}',
             parse_mode=ParseMode.HTML
@@ -236,7 +216,7 @@ async def validate_new_callsign(message: types.Message, state: FSMContext) -> No
     data = await state.get_data()
     telegram_id = data.get('telegram_id')
     try:
-        await user_update(telegram_id=telegram_id, callsign=sanitized_callsign)
+        await user_update(telegram_id=telegram_id, callsign=validated_input)
     except ValueError:
         await state.clear()
         await message.answer(
@@ -247,7 +227,7 @@ async def validate_new_callsign(message: types.Message, state: FSMContext) -> No
     await message.answer(
         text=f'Для <b>{data.get("callsign").capitalize()}</b> '
              f'установлен новый позывной: '
-             f'<b>{new_callsign.capitalize()}</b>',
+             f'<b>{validated_input.capitalize()}</b>',
         parse_mode=ParseMode.HTML
     )
     await state.clear()
@@ -296,32 +276,17 @@ async def validate_new_age(message: types.Message, state: FSMContext) -> None:
     if not new_date:
         return
 
-    if len(new_date) > 10:
-        await state.update_data(new_age='')
-        await message.answer(
-            text='Превышена максимальная длина сообщения в 10 '
-                 'символов. Надо ввести корректную дату.\n'
-                 'Формат: ДД.ММ.ГГГГ (10 символов ровно)\n\n'
-                 f'{CANCEL_REMINDER}',
-        )
-        return
-    try:
-        birth_date = datetime.strptime(new_date, '%d.%m.%Y')
-    except ValueError:
-        await message.answer(
-            text='Неверный формат даты! Нужно указать дату рождения '
-                 'в формате ДД.ММ.ГГГГ, например:\n\n'
-                 '<b>01.01.1990</b>\n\n'
-                 f'{CANCEL_REMINDER}',
-        )
+    validated_input = await general_user_validation(message=message, state=state, age=new_date)
+
+    if not validated_input:
         return
 
-    today = datetime.today()
-    age = today.year - birth_date.year - ((today.month, today.day) < (birth_date.month, birth_date.day))
+    validated_input = validated_input.age
+    age = calculate_age(birth_date=validated_input)
 
     if age < 18:
         await message.answer(
-            text='Возраст меньше 18 лет установить нельзя.\n\n'
+            text='Ошибка: Возраст меньше 18 лет установить нельзя.\n\n'
                  f'{CANCEL_REMINDER}',
         )
         return
@@ -329,7 +294,7 @@ async def validate_new_age(message: types.Message, state: FSMContext) -> None:
     data = await state.get_data()
     telegram_id = data.get('telegram_id')
     try:
-        await user_update(telegram_id=telegram_id, age=birth_date)
+        await user_update(telegram_id=telegram_id, age=validated_input)
     except ValueError:
         await state.clear()
         await message.answer(
@@ -340,7 +305,7 @@ async def validate_new_age(message: types.Message, state: FSMContext) -> None:
     await message.answer(
         text=f'Для пользователя {data.get("callsign").capitalize()} '
              f'установлена новая дата рождения: '
-             f'<b>{birth_date.strftime("%d.%m.%Y")}</b> [Возраст:<b>{age}</b>]'
+             f'<b>{validated_input.strftime("%d.%m.%Y")}</b> [Возраст:<b>{age}</b>]'
     )
     await state.clear()
 

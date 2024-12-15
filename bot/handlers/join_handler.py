@@ -1,5 +1,3 @@
-import re
-
 from datetime import datetime
 
 from aiogram import types, Router
@@ -12,7 +10,7 @@ from aiogram.types import ReplyKeyboardMarkup, KeyboardButton, ReplyKeyboardRemo
 from handlers.cancel_handler import cancel_handler
 
 from utils.text_answers import answers
-from utils.text_utils import merge_message_parts
+from utils.text_utils import merge_message_parts, calculate_age
 from utils.decorators import (
     is_text,
     survey_completion_status,
@@ -24,9 +22,9 @@ from database.users_db_manager import (
     is_callsign_taken,
 )
 
-router = Router()
+from validators.user_validators import general_user_validation
 
-LATIN_REGEX = r'[^a-zA-Z]'
+router = Router()
 
 CANCEL_REMINDER = answers.get('CANCEL_REMINDER')
 
@@ -61,19 +59,16 @@ async def join_command(message: types.Message, state: FSMContext) -> None:
 @is_text
 async def validate_name(message: types.Message, state: FSMContext) -> None:
     name = await merge_message_parts(message=message, state=state, key='name')
+
     if not name:
         return
-    if len(name) > 100:
-        await state.update_data(name='')
-        await message.answer(
-            text='Превышен лимит в 100 символов. Напиши свои '
-                 'ФИО заново.\n\n'
-                 f'{CANCEL_REMINDER}',
-            parse_mode=ParseMode.HTML
-        )
-        return
-    await state.update_data(name=name.lower())
 
+    validated_input = await general_user_validation(message=message, state=state, name=name)
+
+    if not validated_input:
+        return
+
+    await state.update_data(name=validated_input.name.lower())
     await state.set_state(Form.callsign)
     await message.answer(
         text='У тебя есть позывной? Если да, напиши какой. '
@@ -90,46 +85,31 @@ async def validate_name(message: types.Message, state: FSMContext) -> None:
 @is_text
 async def validate_callsign(message: types.Message, state: FSMContext) -> None:
     callsign = await merge_message_parts(message=message, state=state, key='callsign')
+
     if not callsign:
         return
 
-    sanitized_callsign = re.sub(LATIN_REGEX, '', callsign)
-    not_unique_callsign = await is_callsign_taken(sanitized_callsign.lower())
+    validated_input = await general_user_validation(message=message, state=state, callsign=callsign)
 
-    if len(sanitized_callsign) > 10:
-        await state.update_data(callsign='')
-        await message.answer(
-            text='Превышен лимит позывного в 10 символов. '
-                 'Введи корректный позывной.\n\n'
-                 f'{CANCEL_REMINDER}',
-            parse_mode=ParseMode.HTML
-        )
+    if not validated_input:
         return
 
-    if not sanitized_callsign and message.text != '-':
-        await message.answer(
-            text='Неверный формат позывного! Пожалуйста, напиши позывной правильно. '
-                 'Или поставь "-", если позывного еще нет.\n\n'
-                 '<i>Позывной должен быть написан на латинице, без пробелов, цифр и символов.</i>\n\n'
-                 f'{CANCEL_REMINDER}',
-            parse_mode=ParseMode.HTML
-        )
-        return
+    not_unique_callsign = await is_callsign_taken(callsign=validated_input.callsign)
 
     if callsign.lower() == '-':
         user = await user_get_or_create(telegram_id=message.from_user.id)
-        sanitized_callsign = f'rdwn_{user.id}'
+        validated_input.callsign = f'rd{user.id}'
 
     if not_unique_callsign:
         await state.update_data(callsign='')
         await message.answer(
-            text='К сожалению такой позывной уже занят. '
+            text='Ошибка: К сожалению такой позывной уже занят. '
                  'Придумай себе другой позывной.\n\n'
                  f'{CANCEL_REMINDER}',
         )
         return
 
-    await state.update_data(callsign=sanitized_callsign.lower())
+    await state.update_data(callsign=validated_input.callsign.lower())
     await state.set_state(Form.age)
     await message.answer(
         text='Напиши свою настоящую дату рождения в формате ДД.ММ.ГГГГ, например:\n\n'
@@ -144,36 +124,20 @@ async def validate_callsign(message: types.Message, state: FSMContext) -> None:
 @is_text
 async def validate_age(message: types.Message, state: FSMContext) -> None:
     date = await merge_message_parts(message=message, state=state, key='age')
+
     if not date:
         return
-    if len(date) > 10:
-        await state.update_data(age='')
-        await message.answer(
-            text='Превышена максимальная длина сообщения в 10 '
-                 'символов. Введи корректную дату в формате '
-                 'ДД.ММ.ГГГГ\n\n'
-                 f'{CANCEL_REMINDER}',
-            parse_mode=ParseMode.HTML
-        )
-        return
-    try:
-        birth_date = datetime.strptime(date, '%d.%m.%Y')
-    except ValueError:
-        await message.answer(
-            text='Неверный формат даты! Пожалуйста, укажи свою дату '
-                 'рождения в формате ДД.ММ.ГГГГ, например:\n\n'
-                 '<b>01.01.1990</b>\n\n'
-                 f'{CANCEL_REMINDER}',
-        )
 
+    validated_input = await general_user_validation(message=message, state=state, age=date)
+
+    if not validated_input:
         return
 
-    today = datetime.today()
-
-    age = today.year - birth_date.year - ((today.month, today.day) < (birth_date.month, birth_date.day))
+    validated_input = validated_input.age
+    age = calculate_age(birth_date=validated_input)
 
     if age < 21:
-        await state.update_data(age=birth_date)
+        await state.update_data(age=validated_input)
         data = await state.get_data()
         data['approved'] = False
         await user_update(telegram_id=message.from_user.id, **data)
@@ -184,7 +148,7 @@ async def validate_age(message: types.Message, state: FSMContext) -> None:
         await state.clear()
         return
 
-    await state.update_data(age=birth_date)
+    await state.update_data(age=validated_input)
     await state.set_state(Form.about)
     await message.answer(
         text='Расскажи в паре предложений о себе. Чем занимаешься по жизни, как созрел '
@@ -284,7 +248,6 @@ async def validate_car(message: types.Message, state: FSMContext) -> None:
                 resize_keyboard=True
             )
         )
-
         return
 
     await state.update_data(car=car_status)
@@ -396,21 +359,9 @@ async def validate_agreement(message: types.Message, state: FSMContext) -> None:
                 resize_keyboard=True
             )
         )
-
         return
 
     agreement_status = valid_response.get(agreement.lower())
-
-    if agreement_status:
-        await state.update_data(agreement=agreement_status)
-        data = await state.get_data()
-        await user_update(telegram_id=message.from_user.id, **data)
-        await message.answer(
-            text='Опрос пройден! Спасибо!',
-            reply_markup=ReplyKeyboardRemove()
-        )
-
-        await state.clear()
 
     if not agreement_status:
         await cancel_handler(message=message, state=state)
@@ -418,3 +369,14 @@ async def validate_agreement(message: types.Message, state: FSMContext) -> None:
             text='Без согласия с вышеуказанными пунктам, увы, вступить '
                  'в нашу команду не получится.'
         )
+        await state.clear()
+        return
+
+    await state.update_data(agreement=agreement_status)
+    data = await state.get_data()
+    await user_update(telegram_id=message.from_user.id, **data)
+    await message.answer(
+        text='Опрос пройден! Спасибо!',
+        reply_markup=ReplyKeyboardRemove()
+    )
+    await state.clear()
