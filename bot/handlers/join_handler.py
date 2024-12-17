@@ -1,5 +1,3 @@
-from datetime import datetime
-
 from aiogram import types, Router
 from aiogram.filters import Command
 from aiogram.fsm.state import State, StatesGroup
