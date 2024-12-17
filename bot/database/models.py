@@ -36,7 +36,9 @@ class Event(Model):
         MaxValueValidator(180),
     ]
     )
-    description = fields.TextField(null=True)
+    description = fields.TextField(max_length=3000, null=True)
+    datetime_event_start = fields.DatetimeField(null=True)
+    datetime_event_end = fields.DatetimeField(null=True)
     expire = fields.DatetimeField()
 
     class Meta:
