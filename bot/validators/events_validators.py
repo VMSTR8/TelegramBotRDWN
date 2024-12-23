@@ -1,6 +1,13 @@
 from datetime import datetime
 
+from aiogram import types
+from aiogram.enums import ParseMode
+from aiogram.fsm.context import FSMContext
+
 from pydantic import BaseModel, field_validator, ValidationError
+from utils.text_answers import answers
+
+CANCEL_REMINDER = answers.get('CANCEL_REMINDER')
 
 
 class EventValidator(BaseModel):
@@ -14,15 +21,16 @@ class EventValidator(BaseModel):
 
     @field_validator("name", mode='before')
     def validate_name(cls, value):
-        if not value or value.strip():
+        if not value or not value.strip():
             raise ValueError('Название мероприятия не может быть пустым')
         if len(value) > 255:
             raise ValueError('Превышен лимит в 255 символов для названия мероприятия')
+
         return value.lower()
 
     @field_validator("organization", mode='before')
     def validate_organization(cls, value):
-        if not value or value.strip():
+        if not value or not value.strip():
             raise ValueError('Имя организатора мероприятия не может быть пустым')
         if len(value) > 255:
             raise ValueError(
@@ -33,10 +41,12 @@ class EventValidator(BaseModel):
 
     @field_validator("price", mode='before')
     def validate_price(cls, value):
-        if not value or value.strip():
+        if not value or not value.strip():
             raise ValueError('Значение цены не может быть пустым')
         if not value.isnumeric():
             raise ValueError('Цена должна быть целым и не отрицательным числом')
+        if len(value) > 6:
+            raise ValueError('Цена должна быть меньше 1000000')
         return value
 
     @field_validator("coordinates", mode='before')
@@ -53,7 +63,7 @@ class EventValidator(BaseModel):
 
     @field_validator("description", mode='before')
     def validate_description(cls, value):
-        if not value or value.strip():
+        if not value or not value.strip():
             raise ValueError('Описание мероприятия не может быть пустым')
         if len(value) > 3000:
             raise ValueError('Превышен лимит в 3000 символов для описания мероприятия')
@@ -107,3 +117,19 @@ class EventValidator(BaseModel):
         if datetime.now() > value:
             raise ValueError('Нельзя устанавливать прошедшие дату и время.')
         return value
+
+
+async def general_event_validation(message: types.Message, state: FSMContext, **kwargs):
+    try:
+        validated_input = EventValidator(**kwargs)
+    except ValidationError as exc:
+        key_with_error = exc.errors()[0]['loc'][0]
+        error_message = exc.errors()[0]['msg'].lstrip('Value error, ')
+        await state.update_data(**{key_with_error: ''})
+        await message.answer(
+            text=f'Ошибка: {error_message}\n\n'
+                 f'{CANCEL_REMINDER}',
+            parse_mode=ParseMode.HTML
+        )
+        return
+    return validated_input
